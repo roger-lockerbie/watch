@@ -1,0 +1,6 @@
+paramiko
+pyvmomi
+pyyaml
+requests
+pywinrm
+colorama

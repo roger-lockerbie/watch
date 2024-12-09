@@ -1,0 +1,46 @@
+# config.yaml
+
+cohesity:
+  vip: 'sts-anz-dp01.ad.ltntdev.com'
+  username: 'admin'
+  domain: 'local'
+  # password: via environment variable or prompted
+
+vmware:
+  host: 'vc.ad.ltntdev.com'
+  username: 'administrator@vsphere.local'
+  # password: via environment variable or prompted
+  port: 443
+  # The following details must be adjusted based on your environment.
+  # These are used for cloning:
+  vCenterId: 'vc.ad.ltntdev.com'
+  # resourcePoolId: 'cleanroom_resources'
+  vmFolderId: 'vm'
+  datacenterName: 'Datacenter'
+  computeResource: 'cleanroom_resources'
+  vmFolder: '/vc.ad.ltntdev.com/Datacenters/Datacenter/vm/simulated_cleanroom'
+  networkName: 'VM Network'
+  viewName: 'cloneVMs'
+  prefix: 'wclone-'
+
+ssh:
+  username: 'root'  # For Linux VMs
+  # password: via environment variable or prompted
+  port: 22
+
+winrm:
+  username: 'Administrator'  # For Windows VMs
+  # password: via environment variable or prompted
+  port: 5986
+
+wazuh:
+  manager_address: '10.2.0.7'
+  api_user: 'admin'
+  # password: via environment variable or prompted
+  agent_name: 'admin'
+  # password: via environment variable or prompted
+  monitor_paths:
+    - '/'
+
+general:
+  timezone: 'UTC'  # Adjust as needed
