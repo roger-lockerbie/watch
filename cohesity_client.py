@@ -2,6 +2,7 @@
 import os
 import time
 import sys
+import logging
 from pyhesity import api, apiauth, apidrop
 from colorama import Fore
 import json
@@ -14,7 +15,7 @@ class CohesityClient:
         self.domain = config['cohesity']['domain']
         self.password = os.getenv('COHESITY_PASSWORD')
         if not self.password:
-            print(Fore.RED + "Error: COHESITY_PASSWORD environment variable not set")
+            logging.error( "Error: COHESITY_PASSWORD environment variable not set")
             sys.exit(1)
         self.connect()
 
@@ -25,7 +26,9 @@ class CohesityClient:
     def get_vm_id_and_snapshots(self, vm_name):
         # Search for VM using data-protect search (v2)
         search_url = f"data-protect/search/protected-objects?searchString={vm_name}&environments=kVMware&snapshotActions=RecoverVMs,RecoverVApps,RecoverVAppTemplates"
+        logging.debug(f"API GET request to URL: {search_url}")
         results = api('get', search_url, v=2)
+        logging.debug(f"API response: {results}")
         if not results or 'objects' not in results:
             raise Exception(f"VM '{vm_name}' not found")
 
@@ -39,6 +42,8 @@ class CohesityClient:
         # Get snapshots for the VM
         snapshots_url = f"data-protect/objects/{vm_id}/snapshots"
         snap_response = api('get', snapshots_url, v=2)
+        logging.debug(f"API GET request to URL: {snapshots_url}")
+        logging.debug(f"API response: {snap_response}")
         if not snap_response or 'snapshots' not in snap_response:
             raise Exception(f"No snapshots found for VM '{vm_name}'")
 
@@ -48,7 +53,7 @@ class CohesityClient:
         return vm_id, snapshots
 
     def _walk_vm_folders(self, node, vmFolderId, fullPath=''):
-        """Walk VM folders recursively, similar to walkVMFolders in PowerShell script."""
+        """Walk VM folders recursively"""
         newPath = f"{fullPath}/{node['protectionSource']['name']}"
         psource = node['protectionSource']
         vmWarePS = psource.get('vmWareProtectionSource', {})
@@ -66,7 +71,7 @@ class CohesityClient:
             for subnode in node['nodes']:
                 self._walk_vm_folders(subnode, vmFolderId, newPath)
 
-    def clone_vm(self, vm_name, selected_snapshot=None):
+    def clone_vm(self, vm_name, selected_snapshot=None, suffix=None):
         """
         Clone a VM using Cohesity, from a specific snapshot if selected_snapshot is provided.
         selected_snapshot: the snapshot dictionary chosen by the user containing runStartTimeUsecs, etc.
@@ -88,6 +93,9 @@ class CohesityClient:
         # Find vCenter
         vCenterList = api('get',
                           '/entitiesOfType?environmentTypes=kVMware&vmwareEntityTypes=kVCenter&vmwareEntityTypes=kStandaloneHost')
+        logging.debug(
+            f"API GET request to URL: /entitiesOfType?environmentTypes=kVMware&vmwareEntityTypes=kVCenter&vmwareEntityTypes=kStandaloneHost")
+        logging.debug(f"API response: {vCenterList}")
         if not vCenterList:
             raise Exception("No vCenters found")
         vCenter = next((c for c in vCenterList if c['displayName'].lower() == vCenterName.lower()), None)
@@ -99,6 +107,9 @@ class CohesityClient:
         # find vCenterSource including VM folders
         vCenterSources = api('get',
                              'protectionSources?environments=kVMware&includeVMFolders=true&excludeTypes=kVirtualMachine')
+        logging.debug(
+            f"API GET request to URL: protectionSources?environments=kVMware&includeVMFolders=true&excludeTypes=kVirtualMachine")
+        logging.debug(f"API response: {vCenterSources}")
         vCenterSource = next(
             (src for src in vCenterSources if src['protectionSource']['name'].lower() == vCenterName.lower()), None)
         if not vCenterSource:
@@ -106,8 +117,8 @@ class CohesityClient:
 
         # Attempt to find resource pool
         resourcePools = api('get', f"/resourcePools?vCenterId={vCenterId}")
-        print(
-            Fore.BLUE + f"Available Resource Pools: {[rp['resourcePool']['vmwareEntity']['name'] for rp in resourcePools]}")
+        logging.debug(f"API GET request to URL: /resourcePools?vCenterId={vCenterId}")
+        logging.debug(f"API response: {resourcePools}")
 
         if not resourcePools:
             raise Exception("No resource pools found")
@@ -145,6 +156,8 @@ class CohesityClient:
 
             # Fetch the complete resource pool details
             allRPs = api('get', f"/resourcePools?vCenterId={vCenterId}")
+            logging.debug(f"API GET request to URL: /resourcePools?vCenterId={vCenterId}")
+            logging.debug(f"API response: {allRPs}")
             if not allRPs:
                 raise Exception("No resource pools found after fallback")
             resourcePool = next((rp for rp in allRPs if rp['resourcePool']['id'] == resourcePoolId), None)
@@ -176,6 +189,8 @@ class CohesityClient:
             folderId = foundId
 
         vmFolders = api('get', f"/vmwareFolders?resourcePoolId={resourcePoolId}&vCenterId={vCenterId}")
+        logging.debug(f"API GET request to URL: /vmwareFolders?resourcePoolId={resourcePoolId}&vCenterId={vCenterId}")
+        logging.debug(f"API response: {vmFolders}")
         if not vmFolders or 'vmFolders' not in vmFolders:
             raise Exception("No VM folders found")
 
@@ -185,6 +200,8 @@ class CohesityClient:
 
         # Find VM snapshot info using searchvms
         searchResults = api('get', f"/searchvms?entityTypes=kVMware&vmName={vm_name}")
+        logging.debug(f"API GET request to URL: /searchvms?entityTypes=kVMware&vmName={vm_name}")
+        logging.debug(f"API response: {searchResults}")
         if not searchResults or 'vms' not in searchResults or not searchResults['vms']:
             raise Exception(f"VM '{vm_name}' not found in Cohesity snapshots")
 
@@ -219,7 +236,9 @@ class CohesityClient:
             if not networkName:
                 raise Exception("Network name required")
             networks = api('get', f"/networkEntities?resourcePoolId={resourcePoolId}&vCenterId={vCenterId}")
-            print(json.dumps(networks, indent=4))
+            logging.debug(
+                f"API GET request to URL: /networkEntities?resourcePoolId={resourcePoolId}&vCenterId={vCenterId}")
+            logging.debug(f"API response: {networks}")
 
             if not networks:
                 raise Exception("No networks found")
@@ -231,7 +250,7 @@ class CohesityClient:
 
         # Construct cloneTask
         cloneTask = {
-            'name': 'Clone-VM',
+            'name': 'Clone-VM-Wazuh',
             'objects': [
                 {
                     'jobId': latestVM['vmDocument']['objectId']['jobId'],
@@ -246,7 +265,8 @@ class CohesityClient:
             },
             'continueRestoreOnError': False,
             'renameRestoredObjectParam': {
-                'prefix': prefix
+                'prefix': prefix,
+                'suffix': suffix if suffix else ''
             },
             'restoreParentSource': {
                 'type': vCenter['type'],
@@ -264,17 +284,16 @@ class CohesityClient:
             'restoredObjectsNetworkConfig': restoredObjectsNetworkConfig
         }
 
-        # Print cloneTask for verification
-        print(Fore.CYAN + "Constructed Clone Task Payload:")
-        print(json.dumps(cloneTask, indent=4))
+        logging.debug("Constructed Clone Task Payload:")
+        logging.debug(json.dumps(cloneTask, indent=4))
 
         # Make the API call to clone
         response = api('post', '/clone', cloneTask)
         if not response:
             raise Exception("No response from /clone API")
 
-        print(Fore.CYAN + "Constructed Clone Task Payload Response:")
-        print(json.dumps(response, indent=4))
+        logging.debug("Constructed Clone Task Payload Response:")
+        logging.debug(json.dumps(response, indent=4))
 
         taskId = response['restoreTask']['performRestoreTaskState']['base']['taskId']
         return taskId
@@ -286,11 +305,24 @@ class CohesityClient:
             task = api('get', f"/restoretasks/{task_id}")
             if not task:
                 raise Exception("Unable to retrieve task status from Cohesity")
-            # Debug: Print the structure of the task response
-            print(Fore.YELLOW + "Task Response:")
-            print(json.dumps(task, indent=4))
 
-            publicStatus = task['restoreTask']['performRestoreTaskState']['base']['publicStatus']
+            # Debug: Print the structure of the task response
+            logging.debug("Task Response:")
+            logging.debug(json.dumps(task, indent=4))
+
+            # Check if task is a list
+            if isinstance(task, list):
+                if len(task) == 0:
+                    raise Exception("No tasks found in the response")
+                task = task[0]  # Access the first (and presumably only) task
+
+            try:
+                publicStatus = task['restoreTask']['performRestoreTaskState']['base']['publicStatus']
+            except KeyError as e:
+                raise Exception(f"Unexpected task structure: missing key {e}")
+
+            logging.info(f"Current Clone Task Status: {publicStatus}")
+
             if publicStatus in finishedStates:
                 if publicStatus == 'kFailure':
                     errMsg = 'Unknown error'
@@ -307,33 +339,44 @@ class CohesityClient:
         cloned_vm_name: name of the cloned VM to destroy
         wait: wait for completion before returning
         """
+        clone_type_mapping = {'vm': 2}
 
-        # cloneType='vm' -> type=2
-        cloneTypeMapping = {
-            'vm': 2
-        }
-
+        # Fetch restore tasks
         clones = api('get',
                      "/restoretasks?restoreTypes=kCloneView&restoreTypes=kCloneApp&restoreTypes=kCloneVMs&restoreTypes=kConvertAndDeployVMs&restoreTypes=kCloneAppView")
 
-        if not clones:
-            raise Exception("No restore tasks found for destruction")
+        if not isinstance(clones, list) or len(clones) == 0:
+            raise Exception("Restore tasks list is empty or improperly formatted")
 
         active_vm_clones = []
         for clone in clones:
-            if (clone['restoreTask'].get('destroyClonedTaskStateVec') is None and
-                    clone['restoreTask']['performRestoreTaskState']['base']['type'] == cloneTypeMapping['vm'] and
-                    clone['restoreTask']['performRestoreTaskState']['base']['publicStatus'] == 'kSuccess'):
+            task = clone.get('restoreTask', {})
+            state = task.get('performRestoreTaskState', {}).get('base', {})
+            if (not task.get('destroyClonedTaskStateVec') and
+                    state.get('type') == clone_type_mapping['vm'] and
+                    state.get('publicStatus') == 'kSuccess'):
                 active_vm_clones.append(clone)
 
+        # Process active clones
         taskId_to_destroy = None
         for clone in active_vm_clones:
             tId = clone['restoreTask']['performRestoreTaskState']['base']['taskId']
             fulltask = api('get', f"/restoretasks/{tId}")
-            if ('restoreInfo' in fulltask['restoreTask']['performRestoreTaskState'] and
+
+            # Ensure fulltask is a dictionary
+            if isinstance(fulltask, list) and len(fulltask) > 0:
+                fulltask = fulltask[0]  # Extract the first item if it's a list
+            else:
+                raise Exception("Invalid API response: Expected a list with at least one dictionary item")
+
+            if (fulltask.get('restoreTask') and
+                    'performRestoreTaskState' in fulltask['restoreTask'] and
+                    'restoreInfo' in fulltask['restoreTask']['performRestoreTaskState'] and
                     'restoreEntityVec' in fulltask['restoreTask']['performRestoreTaskState']['restoreInfo']):
-                for vm in fulltask['restoreTask']['performRestoreTaskState']['restoreInfo']['restoreEntityVec']:
-                    restored_vm_name = vm['restoredEntity']['vmwareEntity']['name']
+
+                restore_info = fulltask['restoreTask']['performRestoreTaskState']['restoreInfo']
+                for vm in restore_info['restoreEntityVec']:
+                    restored_vm_name = vm.get('restoredEntity', {}).get('vmwareEntity', {}).get('name', '')
                     if restored_vm_name.lower() == cloned_vm_name.lower():
                         taskId_to_destroy = tId
                         break
@@ -343,32 +386,19 @@ class CohesityClient:
         if not taskId_to_destroy:
             raise Exception(f"Cloned VM {cloned_vm_name} not found among active clones")
 
-        teardownResp = api('post', f"destroyclone/{taskId_to_destroy}", data=None)
-        if not teardownResp:
+        # Destroy the task
+        teardown_resp = api('post', f"/destroyclone/{taskId_to_destroy}", data=None)
+        if not teardown_resp:
             raise Exception("No response from destroyclone API")
 
         if wait:
             while True:
-                updatedTask = api('get', f"/restoretasks/{taskId_to_destroy}")
-                if 'destroyClonedTaskStateVec' in updatedTask['restoreTask'] and len(
-                        updatedTask['restoreTask']['destroyClonedTaskStateVec']) > 0:
-                    status = updatedTask['restoreTask']['destroyClonedTaskStateVec'][0]['status']
-                    if status != 1:
-                        break
-                else:
+                updated_task = api('get', f"/restoretasks/{taskId_to_destroy}")
+
+                if isinstance(updated_task, list) and len(updated_task) > 0:
+                    updated_task = updated_task[0]  # Extract first item if list
+
+                destroy_states = updated_task.get('restoreTask', {}).get('destroyClonedTaskStateVec', [])
+                if destroy_states and destroy_states[0].get('status') != 1:
                     break
                 time.sleep(5)
-
-    def create_alert(self, vm_name, findings):
-        alert = {
-            "alertCategory": "kSecurity",
-            "alertSeverity": "kCritical",
-            "alertState": "kOpen",
-            "alertType": "kSecurityThreatDetected",
-            "description": f"Malware detected on VM {vm_name}:\n{findings}"
-        }
-        response = api('post', 'alerts', alert)
-        if 'id' in response:
-            print(Fore.GREEN + f"Alert created with ID: {response['id']}")
-        else:
-            raise Exception("Failed to create alert")

@@ -31,11 +31,11 @@ ssh:
 winrm:
   username: 'Administrator'  # For Windows VMs
   # password: via environment variable or prompted
-  port: 5986
+  port: 5985
 
 wazuh:
-  manager_address: '10.2.0.7'
-  api_user: 'admin'
+  manager_address: 'lnxsrv.ad.ltntdev.com'
+  api_user: 'wazuh'
   # password: via environment variable or prompted
   agent_name: 'admin'
   # password: via environment variable or prompted
@@ -44,3 +44,7 @@ wazuh:
 
 general:
   timezone: 'UTC'  # Adjust as needed
+
+logging:
+  log_dir: '.'  # Directory for log files. Default is current directory.
+  log_file: 'watch.log'  # Log file name. Default is 'watch.log'.
